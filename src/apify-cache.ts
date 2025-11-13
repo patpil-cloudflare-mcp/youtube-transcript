@@ -34,6 +34,12 @@
 import type { KVNamespace } from "@cloudflare/workers-types";
 
 /**
+ * Cache version - increment this when changing cached data structure
+ * Old cached data will become inaccessible and naturally expire
+ */
+const CACHE_VERSION = "v2"; // Bumped for videoId/wordCount addition
+
+/**
  * Get cached Apify result from KV
  *
  * CRITICAL: Call this BEFORE acquiring semaphore slot.
@@ -200,8 +206,9 @@ export async function hashApifyInput(input: any): Promise<string> {
 /**
  * Build cache key from actor ID and input hash
  *
- * Format: "apify:{actorId}:{inputHash}"
+ * Format: "apify:{version}:{actorId}:{inputHash}"
  * - Namespace: "apify:" for easy identification
+ * - Version: Cache version for structure changes (invalidates old cache)
  * - Actor ID: Ensures isolation between different Actors
  * - Input hash: Uniquely identifies request parameters
  *
@@ -211,10 +218,10 @@ export async function hashApifyInput(input: any): Promise<string> {
  *
  * @example
  * buildCacheKey("twitter-scraper", "a3f2c8b9...")
- * // → "apify:twitter-scraper:a3f2c8b9..."
+ * // → "apify:v2:twitter-scraper:a3f2c8b9..."
  */
 function buildCacheKey(actorId: string, inputHash: string): string {
-    return `apify:${actorId}:${inputHash}`;
+    return `apify:${CACHE_VERSION}:${actorId}:${inputHash}`;
 }
 
 /**

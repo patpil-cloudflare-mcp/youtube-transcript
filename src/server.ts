@@ -77,8 +77,27 @@ export class YoutubeTranscript extends McpAgent<Env, unknown, Props> {
                     const actorInput = { videoUrl: params.videoUrl };
                     const results = await apifyClient.runActorSync(ACTOR_ID, actorInput, TIMEOUT);
 
+                    // DEBUG: Log raw Actor response
+                    console.log(`[DEBUG] Actor returned ${results.items?.length || 0} items`);
+                    console.log(`[DEBUG] Full results structure:`, JSON.stringify(results, null, 2));
+
                     const transcript = results.items[0] || null;
+                    console.log(`[DEBUG] First item (transcript):`, JSON.stringify(transcript, null, 2));
+
+                    if (transcript) {
+                        console.log(`[DEBUG] Transcript object keys:`, Object.keys(transcript));
+                        console.log(`[DEBUG] Has searchResult:`, 'searchResult' in transcript);
+                        console.log(`[DEBUG] searchResult value:`, transcript.searchResult);
+                        console.log(`[DEBUG] searchResult type:`, typeof transcript.searchResult);
+                        console.log(`[DEBUG] searchResult is array:`, Array.isArray(transcript.searchResult));
+                        if (Array.isArray(transcript.searchResult)) {
+                            console.log(`[DEBUG] searchResult length:`, transcript.searchResult.length);
+                            console.log(`[DEBUG] First searchResult item:`, JSON.stringify(transcript.searchResult[0], null, 2));
+                        }
+                    }
+
                     if (!transcript || !transcript.searchResult || !Array.isArray(transcript.searchResult) || transcript.searchResult.length === 0) {
+                        console.error(`[ERROR] Validation failed - transcript:`, !!transcript, 'searchResult:', !!transcript?.searchResult, 'isArray:', Array.isArray(transcript?.searchResult), 'length:', transcript?.searchResult?.length);
                         return {
                             isError: true,
                             content: [{ type: "text", text: "No transcript available. No tokens charged." }]

@@ -10,7 +10,7 @@
  */
 
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
-import { generateObject } from "ai";
+import { generateObject, generateText } from "ai";
 import { createWorkersAI } from "workers-ai-provider";
 import { z } from "zod";
 import { ApifyClient } from 'apify-client';
@@ -29,13 +29,9 @@ export type TranscriptWorkflowResult = {
     chapterCount: number;
 };
 
-// Zod schemas for AI structured outputs
+// Zod schema for AI structured outputs
 const cleanedTranscriptSchema = z.object({
     cleanedText: z.string()
-});
-
-const summarySchema = z.object({
-    summary: z.string()  // Markdown formatted with timestamp headers
 });
 
 export class TranscriptProcessingWorkflow extends WorkflowEntrypoint<Env, TranscriptWorkflowParams> {
@@ -128,13 +124,12 @@ The transcript contains timestamps in the format [HH:MM:SS] or [MM:SS] that indi
 Transcript to summarize:
 ${cleanedTranscript}`;
 
-            const { object } = await generateObject({
+            const { text } = await generateText({
                 model,
-                schema: summarySchema,
                 prompt: prompt
             });
 
-            return object.summary;
+            return text;
         });
 
         // Step 5: Save transcript to R2 for archival (optional)

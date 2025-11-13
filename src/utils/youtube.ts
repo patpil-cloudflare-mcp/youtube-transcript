@@ -36,15 +36,15 @@ export function extractYouTubeVideoId(url: string): string | null {
 
 /**
  * Formats Apify transcript result as plain text with timestamps
- * @param transcript - Apify Actor output with searchResult array
+ * @param transcript - Apify Actor output with data array
  * @returns Formatted transcript text
  */
 export function formatTranscriptAsText(transcript: any): string {
-    if (!transcript.searchResult || !Array.isArray(transcript.searchResult)) {
+    if (!transcript.data || !Array.isArray(transcript.data)) {
         return '';
     }
 
-    return transcript.searchResult
+    return transcript.data
         .map((item: any) => {
             // Actor returns 'start' in seconds as string, convert to number
             const timestamp = formatTimestamp(parseFloat(item.start));

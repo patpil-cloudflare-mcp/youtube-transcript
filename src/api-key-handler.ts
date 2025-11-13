@@ -589,18 +589,18 @@ async function executeGetYoutubeTranscriptTool(
 
     if (transcript) {
         console.log(`[DEBUG API-KEY] Transcript object keys:`, Object.keys(transcript));
-        console.log(`[DEBUG API-KEY] Has searchResult:`, 'searchResult' in transcript);
-        console.log(`[DEBUG API-KEY] searchResult value:`, transcript.searchResult);
-        console.log(`[DEBUG API-KEY] searchResult type:`, typeof transcript.searchResult);
-        console.log(`[DEBUG API-KEY] searchResult is array:`, Array.isArray(transcript.searchResult));
-        if (Array.isArray(transcript.searchResult)) {
-            console.log(`[DEBUG API-KEY] searchResult length:`, transcript.searchResult.length);
-            console.log(`[DEBUG API-KEY] First searchResult item:`, JSON.stringify(transcript.searchResult[0], null, 2));
+        console.log(`[DEBUG API-KEY] Has data:`, 'data' in transcript);
+        console.log(`[DEBUG API-KEY] data value:`, transcript.data);
+        console.log(`[DEBUG API-KEY] data type:`, typeof transcript.data);
+        console.log(`[DEBUG API-KEY] data is array:`, Array.isArray(transcript.data));
+        if (Array.isArray(transcript.data)) {
+            console.log(`[DEBUG API-KEY] data length:`, transcript.data.length);
+            console.log(`[DEBUG API-KEY] First data item:`, JSON.stringify(transcript.data[0], null, 2));
         }
     }
 
-    if (!transcript || !transcript.searchResult || !Array.isArray(transcript.searchResult) || transcript.searchResult.length === 0) {
-      console.error(`[ERROR API-KEY] Validation failed - transcript:`, !!transcript, 'searchResult:', !!transcript?.searchResult, 'isArray:', Array.isArray(transcript?.searchResult), 'length:', transcript?.searchResult?.length);
+    if (!transcript || !transcript.data || !Array.isArray(transcript.data) || transcript.data.length === 0) {
+      console.error(`[ERROR API-KEY] Validation failed - transcript:`, !!transcript, 'data:', !!transcript?.data, 'isArray:', Array.isArray(transcript?.data), 'length:', transcript?.data?.length);
       return {
         isError: true,
         content: [{ type: "text", text: "No transcript available. No tokens charged." }]

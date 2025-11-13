@@ -86,18 +86,18 @@ export class YoutubeTranscript extends McpAgent<Env, unknown, Props> {
 
                     if (transcript) {
                         console.log(`[DEBUG] Transcript object keys:`, Object.keys(transcript));
-                        console.log(`[DEBUG] Has searchResult:`, 'searchResult' in transcript);
-                        console.log(`[DEBUG] searchResult value:`, transcript.searchResult);
-                        console.log(`[DEBUG] searchResult type:`, typeof transcript.searchResult);
-                        console.log(`[DEBUG] searchResult is array:`, Array.isArray(transcript.searchResult));
-                        if (Array.isArray(transcript.searchResult)) {
-                            console.log(`[DEBUG] searchResult length:`, transcript.searchResult.length);
-                            console.log(`[DEBUG] First searchResult item:`, JSON.stringify(transcript.searchResult[0], null, 2));
+                        console.log(`[DEBUG] Has data:`, 'data' in transcript);
+                        console.log(`[DEBUG] data value:`, transcript.data);
+                        console.log(`[DEBUG] data type:`, typeof transcript.data);
+                        console.log(`[DEBUG] data is array:`, Array.isArray(transcript.data));
+                        if (Array.isArray(transcript.data)) {
+                            console.log(`[DEBUG] data length:`, transcript.data.length);
+                            console.log(`[DEBUG] First data item:`, JSON.stringify(transcript.data[0], null, 2));
                         }
                     }
 
-                    if (!transcript || !transcript.searchResult || !Array.isArray(transcript.searchResult) || transcript.searchResult.length === 0) {
-                        console.error(`[ERROR] Validation failed - transcript:`, !!transcript, 'searchResult:', !!transcript?.searchResult, 'isArray:', Array.isArray(transcript?.searchResult), 'length:', transcript?.searchResult?.length);
+                    if (!transcript || !transcript.data || !Array.isArray(transcript.data) || transcript.data.length === 0) {
+                        console.error(`[ERROR] Validation failed - transcript:`, !!transcript, 'data:', !!transcript?.data, 'isArray:', Array.isArray(transcript?.data), 'length:', transcript?.data?.length);
                         return {
                             isError: true,
                             content: [{ type: "text", text: "No transcript available. No tokens charged." }]

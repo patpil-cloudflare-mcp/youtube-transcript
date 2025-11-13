@@ -10,10 +10,6 @@
  */
 
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
-import { generateObject, generateText } from "ai";
-import { createWorkersAI } from "workers-ai-provider";
-import { z } from "zod";
-import { ApifyClient } from 'apify-client';
 import { formatTranscriptAsText } from '../utils/youtube';
 import { uploadTextToR2 } from '../utils/r2';
 import type { Env } from '../types';
@@ -29,20 +25,9 @@ export type TranscriptWorkflowResult = {
     chapterCount: number;
 };
 
-// Zod schema for AI structured outputs
-const cleanedTranscriptSchema = z.object({
-    cleanedText: z.string()
-});
-
 export class TranscriptProcessingWorkflow extends WorkflowEntrypoint<Env, TranscriptWorkflowParams> {
     async run(event: WorkflowEvent<TranscriptWorkflowParams>, step: WorkflowStep): Promise<TranscriptWorkflowResult> {
         const { videoId, transcriptData } = event.payload;
-
-        // Initialize Workers AI
-        const workersai = createWorkersAI({ binding: this.env.AI });
-        const model = workersai("@cf/meta/llama-3.1-70b-instruct" as any, {
-            maxTokens: 2048  // Allow longer AI summaries (~6000-8000 chars)
-        });
 
         // Step 1: Prepare timestamped text (convert Apify format to readable text)
         const timestampedData = await step.do("prepare timestamped text", async (): Promise<{ timestampedText: string; rawText: string; wordCount: number }> => {
@@ -83,13 +68,12 @@ Your ONLY goal is to reformat and clean the transcript provided by the user, rem
 Transcript to clean:
 ${timestampedData.timestampedText}`;
 
-            const { object } = await generateObject({
-                model,
-                schema: cleanedTranscriptSchema,
-                prompt: prompt
-            });
+            const response = await this.env.AI.run("@cf/meta/llama-3.1-70b-instruct" as any, {
+                prompt: prompt,
+                max_tokens: 2048
+            }) as any;
 
-            return object.cleanedText;
+            return response.response || '';
         });
 
         // Step 4: AI Call 2 - Summarize sections with timestamps
@@ -126,12 +110,12 @@ The transcript contains timestamps in the format [HH:MM:SS] or [MM:SS] that indi
 Transcript to summarize:
 ${cleanedTranscript}`;
 
-            const { text } = await generateText({
-                model,
-                prompt: prompt
-            });
+            const response = await this.env.AI.run("@cf/meta/llama-3.1-70b-instruct" as any, {
+                prompt: prompt,
+                max_tokens: 2048
+            }) as any;
 
-            return text;
+            return response.response || '';
         });
 
         // Step 5: Save transcript to R2 for archival (optional)

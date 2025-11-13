@@ -580,27 +580,8 @@ async function executeGetYoutubeTranscriptTool(
     const actorInput = { videoUrl: args.videoUrl };
     const results = await apifyClient.runActorSync(ACTOR_ID, actorInput, TIMEOUT);
 
-    // DEBUG: Log raw Actor response
-    console.log(`[DEBUG API-KEY] Actor returned ${results.items?.length || 0} items`);
-    console.log(`[DEBUG API-KEY] Full results structure:`, JSON.stringify(results, null, 2));
-
     const transcript = results.items[0] || null;
-    console.log(`[DEBUG API-KEY] First item (transcript):`, JSON.stringify(transcript, null, 2));
-
-    if (transcript) {
-        console.log(`[DEBUG API-KEY] Transcript object keys:`, Object.keys(transcript));
-        console.log(`[DEBUG API-KEY] Has data:`, 'data' in transcript);
-        console.log(`[DEBUG API-KEY] data value:`, transcript.data);
-        console.log(`[DEBUG API-KEY] data type:`, typeof transcript.data);
-        console.log(`[DEBUG API-KEY] data is array:`, Array.isArray(transcript.data));
-        if (Array.isArray(transcript.data)) {
-            console.log(`[DEBUG API-KEY] data length:`, transcript.data.length);
-            console.log(`[DEBUG API-KEY] First data item:`, JSON.stringify(transcript.data[0], null, 2));
-        }
-    }
-
     if (!transcript || !transcript.data || !Array.isArray(transcript.data) || transcript.data.length === 0) {
-      console.error(`[ERROR API-KEY] Validation failed - transcript:`, !!transcript, 'data:', !!transcript?.data, 'isArray:', Array.isArray(transcript?.data), 'length:', transcript?.data?.length);
       return {
         isError: true,
         content: [{ type: "text", text: "No transcript available. No tokens charged." }]

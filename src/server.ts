@@ -77,27 +77,8 @@ export class YoutubeTranscript extends McpAgent<Env, unknown, Props> {
                     const actorInput = { videoUrl: params.videoUrl };
                     const results = await apifyClient.runActorSync(ACTOR_ID, actorInput, TIMEOUT);
 
-                    // DEBUG: Log raw Actor response
-                    console.log(`[DEBUG] Actor returned ${results.items?.length || 0} items`);
-                    console.log(`[DEBUG] Full results structure:`, JSON.stringify(results, null, 2));
-
                     const transcript = results.items[0] || null;
-                    console.log(`[DEBUG] First item (transcript):`, JSON.stringify(transcript, null, 2));
-
-                    if (transcript) {
-                        console.log(`[DEBUG] Transcript object keys:`, Object.keys(transcript));
-                        console.log(`[DEBUG] Has data:`, 'data' in transcript);
-                        console.log(`[DEBUG] data value:`, transcript.data);
-                        console.log(`[DEBUG] data type:`, typeof transcript.data);
-                        console.log(`[DEBUG] data is array:`, Array.isArray(transcript.data));
-                        if (Array.isArray(transcript.data)) {
-                            console.log(`[DEBUG] data length:`, transcript.data.length);
-                            console.log(`[DEBUG] First data item:`, JSON.stringify(transcript.data[0], null, 2));
-                        }
-                    }
-
                     if (!transcript || !transcript.data || !Array.isArray(transcript.data) || transcript.data.length === 0) {
-                        console.error(`[ERROR] Validation failed - transcript:`, !!transcript, 'data:', !!transcript?.data, 'isArray:', Array.isArray(transcript?.data), 'length:', transcript?.data?.length);
                         return {
                             isError: true,
                             content: [{ type: "text", text: "No transcript available. No tokens charged." }]

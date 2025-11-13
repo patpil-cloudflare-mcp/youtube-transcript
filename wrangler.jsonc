@@ -1,0 +1,215 @@
+/**
+ * Cloudflare Workers Configuration for MCP Server
+ *
+ * This MCP server uses:
+ * - Durable Objects: Required by McpAgent for MCP protocol handling and WebSocket connections
+ * - KV Namespace: Required for OAuth token storage and session management
+ * - D1 Database: Shared token management database (mcp-tokens-database)
+ * - WorkOS Secrets: API Key and Client ID for authentication
+ *
+ * TODO: Update the following:
+ * 1. Change "name" to match your server (e.g., "weather-mcp", "news-mcp")
+ * 2. Update "new_sqlite_classes" with your McpAgent class name
+ * 3. Update "class_name" in durable_objects.bindings to match
+ * 4. Verify KV namespace IDs match CLOUDFLARE_CONFIG.md (already configured - DO NOT change)
+ * 5. Verify D1 database ID matches CLOUDFLARE_CONFIG.md (already configured - DO NOT change)
+ * 6. Add custom bindings if needed (AI, R2, additional KV/D1)
+ * 7. Run verify-consistency.sh before deployment to catch configuration errors
+ *
+ * IMPORTANT: Get all IDs from CLOUDFLARE_CONFIG.md - never create new shared resources!
+ *
+ * For more details on Wrangler configuration:
+ * https://developers.cloudflare.com/workers/wrangler/configuration/
+ */
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "apify-skeleton-mcp",  // Apify MCP Skeleton Template
+  "main": "src/index.ts",
+  "compatibility_date": "2025-03-10",
+  "compatibility_flags": ["nodejs_compat"],
+
+  /**
+   * CRITICAL: Migrations for Durable Objects
+   *
+   * YoutubeTranscript: Required for MCP protocol handling, WebSocket management, and session state.
+   * ApifySemaphore: CRITICAL for concurrency control - enforces 32-concurrent-run Apify limit.
+   *                 Prevents failures when multiple users make simultaneous requests.
+   */
+  "migrations": [
+    {
+      "new_sqlite_classes": ["YoutubeTranscript", "ApifySemaphore"],
+      "tag": "v1"
+    }
+  ],
+
+  /**
+   * REQUIRED: Durable Object bindings
+   */
+  "durable_objects": {
+    "bindings": [
+      {
+        "class_name": "YoutubeTranscript",
+        "name": "MCP_OBJECT"
+      },
+      {
+        "class_name": "ApifySemaphore",
+        "name": "APIFY_SEMAPHORE"  // CRITICAL: Used for Fast Fail pattern
+      }
+    ]
+  },
+
+  /**
+   * REQUIRED for OAuth: Shared KV namespaces
+   *
+   * IMPORTANT: Use IDs from CLOUDFLARE_CONFIG.md - DO NOT create new namespaces!
+   * All MCP servers share the same KV namespaces for OAuth and caching.
+   *
+   * Required namespaces:
+   * - OAUTH_KV: OAuth token storage (shared across ALL servers)
+   * - CACHE_KV: API response caching (shared across ALL servers)
+   * - USER_SESSIONS: Centralized custom login sessions (MANDATORY for panel.wtyczki.ai auth)
+   *
+   * Get IDs from: /Users/patpil/Documents/ai-projects/Cloudflare_mcp/CLOUDFLARE_CONFIG.md
+   * Section: "## 📦 Shared KV Namespaces"
+   */
+  "kv_namespaces": [
+    {
+      "binding": "OAUTH_KV",
+      "id": "b77ec4c7e96043fab0c466a978c2f186",         // From CLOUDFLARE_CONFIG.md
+      "preview_id": "cf8ef9f38ab24ae583d20dd4e973810c"  // For local testing
+    },
+    {
+      "binding": "CACHE_KV",
+      "id": "fa6ff790f146478e85ea77ae4a5caa4b",         // From CLOUDFLARE_CONFIG.md
+      "preview_id": "4b37112559f2429191633d98781645ca"  // For local testing
+    },
+    {
+      "binding": "USER_SESSIONS",
+      "id": "e5ad189139cd44f38ba0224c3d596c73",         // From CLOUDFLARE_CONFIG.md (MANDATORY)
+      "preview_id": "49c43fb4d6e242db87fd885ba46b5a1d"  // For local testing
+    }
+  ],
+
+  /**
+   * REQUIRED for token system: Shared D1 database
+   *
+   * Database ID: ebb389aa-2d65-4d38-a0da-50c7da9dfe8b
+   * This is the shared database used by ALL MCP servers for token management.
+   * DO NOT change this ID - it must be the same across all your MCP servers.
+   */
+  "d1_databases": [
+    {
+      "binding": "TOKEN_DB",
+      "database_name": "mcp-tokens-database",
+      "database_id": "ebb389aa-2d65-4d38-a0da-50c7da9dfe8b"
+    }
+  ],
+
+  /**
+   * OPTIONAL: Workers AI binding for AI models
+   *
+   * Uncomment if you need to use Workers AI:
+   */
+  // "ai": {
+  //   "binding": "AI"
+  // },
+
+  /**
+   * OPTIONAL: Additional KV namespaces
+   *
+   * Example configuration (ONLY uncomment and customize if needed):
+   *
+   * STEP 1: Create namespace: wrangler kv namespace create CUSTOM_KV
+   * STEP 2: Replace <YOUR_CUSTOM_KV_ID> with actual ID from step 1
+   * STEP 3: Uncomment lines below
+   *
+   * NOTE: Commented placeholders are ignored by verify-consistency.sh
+   */
+  // "kv_namespaces": [
+  //   {
+  //     "binding": "CUSTOM_KV",
+  //     "id": "<YOUR_CUSTOM_KV_ID>"  // Replace with actual ID
+  //   }
+  // ],
+
+  /**
+   * REQUIRED: Custom Domain for production deployment
+   *
+   * Uncomment and update after deployment to add Custom Domain:
+   * Custom Domains provide:
+   * - Automatic DNS record creation
+   * - Automatic certificate management
+   * - Better dashboard organization
+   * - Can be invoked within same zone via fetch()
+   *
+   * IMPORTANT: Deploy with `wrangler deploy` to automatically create the Custom Domain
+   */
+  // "routes": [
+  //   {
+  //     "pattern": "[server-slug].wtyczki.ai",
+  //     "custom_domain": true
+  //   }
+  // ],
+
+  /**
+   * SECURITY: Disable workers.dev subdomain (RECOMMENDED)
+   *
+   * Since all production traffic uses Custom Domains, the workers.dev subdomain
+   * serves no production purpose and should be disabled to minimize attack surface.
+   *
+   * Benefits:
+   * - Prevents exposure of development code via Preview URLs
+   * - Reduces reconnaissance opportunities for attackers
+   * - Aligns with security best practices (as of wrangler v4.44.0+)
+   *
+   * Note: Disabling workers.dev also disables Preview URLs by default.
+   * If you need Preview URLs for development, keep workers_dev: true and
+   * enable Cloudflare Access to restrict access to authorized users.
+   */
+  "workers_dev": false,
+
+  /**
+   * RECOMMENDED: Enable observability for debugging
+   */
+  "observability": {
+    "enabled": true
+  },
+
+  /**
+   * OPTIONAL: Local development port
+   */
+  "dev": {
+    "port": 8787
+  },
+
+  /**
+   * REQUIRED: Cloudflare AI Gateway configuration
+   *
+   * These variables route all AI requests through AI Gateway for:
+   * - Authentication with cf-aig-authorization header
+   * - Rate limiting: 60 requests/hour per user
+   * - Response caching with 1-hour TTL
+   * - Request logging and analytics
+   *
+   * Gateway ID: mcp-production-gateway (shared across all servers)
+   * Token: Stored securely as AI_GATEWAY_TOKEN secret via `wrangler secret put`
+   */
+  "vars": {
+    "AI_GATEWAY_ID": "mcp-production-gateway"
+  }
+}
+
+/**
+ * REQUIRED SECRETS (set via wrangler secret put):
+ *
+ * 1. WORKOS_CLIENT_ID - WorkOS OAuth client ID
+ * 2. WORKOS_API_KEY - WorkOS API key for authentication
+ * 3. APIFY_API_TOKEN - Apify API token (CRITICAL for Actor execution)
+ *
+ * Commands:
+ *   echo "your_workos_client_id" | wrangler secret put WORKOS_CLIENT_ID
+ *   echo "your_workos_api_key" | wrangler secret put WORKOS_API_KEY
+ *   echo "your_apify_api_token" | wrangler secret put APIFY_API_TOKEN
+ *
+ * Get Apify token from: https://console.apify.com/account/integrations
+ */

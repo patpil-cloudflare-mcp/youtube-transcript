@@ -1,0 +1,9 @@
+# WorkOS Authentication Credentials
+# Get these from: https://dashboard.workos.com/
+WORKOS_CLIENT_ID=your_workos_client_id_here
+WORKOS_API_KEY=your_workos_api_key_here
+
+# TODO: Add your custom environment variables below
+# Examples:
+# EXTERNAL_API_KEY=your_api_key_here
+# EXTERNAL_API_URL=https://api.example.com

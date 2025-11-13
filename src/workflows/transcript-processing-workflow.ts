@@ -40,7 +40,9 @@ export class TranscriptProcessingWorkflow extends WorkflowEntrypoint<Env, Transc
 
         // Initialize Workers AI
         const workersai = createWorkersAI({ binding: this.env.AI });
-        const model = workersai("@cf/meta/llama-3.1-70b-instruct" as any);
+        const model = workersai("@cf/meta/llama-3.1-70b-instruct" as any, {
+            maxTokens: 2048  // Allow longer AI summaries (~6000-8000 chars)
+        });
 
         // Step 1: Prepare timestamped text (convert Apify format to readable text)
         const timestampedData = await step.do("prepare timestamped text", async (): Promise<{ timestampedText: string; rawText: string; wordCount: number }> => {

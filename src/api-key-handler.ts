@@ -597,9 +597,13 @@ async function executeGetYoutubeTranscriptTool(
     const cached = await getCachedApifyResult(env.CACHE_KV, ACTOR_ID, cacheKey);
 
     if (cached) {
+      // Reconstruct missing fields from available data (handles old cached data)
+      const videoId = cached.videoId || extractYouTubeVideoId(cached.videoUrl || args.videoUrl);
+      const wordCount = cached.wordCount || (cached.transcript ? cached.transcript.split(/\s+/).length : 0);
+
       await consumeTokensWithRetry(env.TOKEN_DB, userId, FLAT_COST, "youtube-transcript", TOOL_NAME, args, cached, true, actionId);
       const preview = cached.transcript ? cached.transcript.substring(0, 2000) : '';
-      return { content: [{ type: "text", text: `✅ Transcript (Cached)\n\nVideo: ${cached.videoId}\nWords: ${cached.wordCount}\n\n${preview}...` }] };
+      return { content: [{ type: "text", text: `✅ Transcript (Cached)\n\nVideo: ${videoId}\nWords: ${wordCount}\n\n${preview}...` }] };
     }
 
     // STEP 3.7: Acquire semaphore

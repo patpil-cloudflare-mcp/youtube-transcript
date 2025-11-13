@@ -154,21 +154,21 @@
   /**
    * REQUIRED: Custom Domain for production deployment
    *
-   * Uncomment and update after deployment to add Custom Domain:
+   * Custom Domain: youtube-transcript.wtyczki.ai
    * Custom Domains provide:
    * - Automatic DNS record creation
    * - Automatic certificate management
    * - Better dashboard organization
    * - Can be invoked within same zone via fetch()
    *
-   * IMPORTANT: Deploy with `wrangler deploy` to automatically create the Custom Domain
+   * IMPORTANT: Deploy with `git push` (automatic) or manually via Cloudflare Dashboard
    */
-  // "routes": [
-  //   {
-  //     "pattern": "[server-slug].wtyczki.ai",
-  //     "custom_domain": true
-  //   }
-  // ],
+  "routes": [
+    {
+      "pattern": "youtube-transcript.wtyczki.ai",
+      "custom_domain": true
+    }
+  ],
 
   /**
    * SECURITY: Disable workers.dev subdomain (RECOMMENDED)

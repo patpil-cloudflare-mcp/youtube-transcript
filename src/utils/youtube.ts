@@ -45,6 +45,7 @@ export function formatTranscriptAsText(transcript: any): string {
     }
 
     return transcript.data
+        .filter((item: any) => item.text && item.text.trim()) // Filter out items without text
         .map((item: any) => {
             // Actor returns 'start' in seconds as string, convert to number
             const timestamp = formatTimestamp(parseFloat(item.start));

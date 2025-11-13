@@ -65,17 +65,22 @@ export class TranscriptProcessingWorkflow extends WorkflowEntrypoint<Env, Transc
 
         // Step 3: AI Call 1 - Clean transcript (remove filler words, fix grammar)
         const cleanedTranscript = await step.do("clean transcript with AI", async (): Promise<string> => {
-            const prompt = `You're an expert transcript editor. Clean the following YouTube video transcript while maintaining all timestamps in [HH:MM:SS] or [MM:SS] format.
+            const prompt = `You're now an expert transcript editor, focused solely on transforming raw YouTube video transcripts into clean, professional, and readable text while maintaining all important information.
 
-RULES:
-- NEVER remove timestamps [MM:SS] or [HH:MM:SS] - they are critical metadata
-- Remove filler words (um, uh, you know, like, sort of, kind of)
-- Eliminate speech stutters, repetitions, false starts
-- Fix grammatical errors while maintaining original meaning
-- Convert run-on sentences into proper structures with punctuation
-- Organize into logical paragraphs where appropriate
-- Preserve all factual information, technical details, important concepts
-- Return ONLY the cleaned transcript, no additional comments
+Your ONLY goal is to reformat and clean the transcript provided by the user, removing all unnecessary elements while preserving the essential content and detailed information.
+
+<rules>
+- NEVER remove timestamps in the format [MM:SS] or [HH:MM:SS]. They are critical metadata and must remain intact, associated with the text that immediately follows them.
+- Remove all filler words and phrases (um, uh, you know, like, sort of, kind of, etc.)
+- Eliminate speech stutters, repetitions, and false starts
+- Fix grammatical errors while maintaining the original meaning
+- Convert run-on sentences into proper structures with appropriate punctuation
+- Organize content into logical paragraphs where appropriate
+- Preserve all factual information, technical details, and important concepts
+- Maintain the original flow and sequence of ideas
+- Return ONLY the cleaned transcript, with no additional comments or explanations
+- Use markdown formatting (headings, bullet points) when clearly indicated in the content
+</rules>
 
 Transcript to clean:
 ${timestampedData.timestampedText}`;
@@ -91,28 +96,34 @@ ${timestampedData.timestampedText}`;
 
         // Step 4: AI Call 2 - Summarize sections with timestamps
         const summaryMarkdown = await step.do("summarize sections with AI", async (): Promise<string> => {
-            const prompt = `You are an expert video analyst. Transform this cleaned transcript into a structured summary of video chapters.
+            const prompt = `You are an expert video analyst. Your task is to transform a cleaned transcript into a structured summary of its chapters.
 
-The transcript contains timestamps [HH:MM:SS] or [MM:SS] indicating section starts.
+The transcript contains timestamps in the format [HH:MM:SS] or [MM:SS] that indicate the start of a thought.
 
-RULES:
-- Identify main thematic sections
-- For each section: use the timestamp as header, write 2-3 sentence summary
-- Return ONLY as Markdown list
-- NO introduction, comments, or concluding remarks
+<rules>
+- Read the entire cleaned transcript.
+- Identify the main thematic sections.
+- For each section:
+  1. Use the timestamp that begins that section as the header.
+  2. Write a concise summary (2-3 sentences) of what was discussed in that section.
+- Return the result ONLY as a Markdown list.
+- Do NOT add any introduction, comments, or concluding remarks.
+</rules>
 
-EXAMPLE INPUT:
-[00:12] Today we'll discuss machine learning. Three main types exist. [01:15] Supervised learning uses labeled data. [04:30] Unsupervised learning finds patterns without labels.
+<example_input_transcript>
+[00:12] Today we'll talk about machine learning algorithms. There are three main types. [01:15] The first type is supervised learning. It works on labeled data, which the algorithm learns from. This allows it to predict outcomes for new data. [04:30] The second type is unsupervised learning. In this case, we don't have labels. The goal is to find hidden patterns or structures in the data, for example, through clustering.
+</example_input_transcript>
 
-EXAMPLE OUTPUT:
+<example_ai_response>
 * **[00:12] Introduction to Machine Learning Algorithms**
-  The speaker introduces machine learning algorithms and announces three main types will be covered.
+    The speaker introduces the topic of machine learning algorithms and announces a discussion of three main types.
 
 * **[01:15] Overview of Supervised Learning**
-  Supervised learning is explained, emphasizing its use of labeled data for training models.
+    This section explains that supervised learning uses labeled data to train models capable of predicting outcomes.
 
 * **[04:30] Definition of Unsupervised Learning**
-  Unsupervised learning is presented as pattern discovery without predefined labels.
+    In contrast, unsupervised learning is presented, which operates on unlabeled data. Its purpose is to discover internal structures, such as through clustering.
+</example_ai_response>
 
 Transcript to summarize:
 ${cleanedTranscript}`;

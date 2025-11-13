@@ -78,7 +78,7 @@ export class YoutubeTranscript extends McpAgent<Env, unknown, Props> {
                     const results = await apifyClient.runActorSync(ACTOR_ID, actorInput, TIMEOUT);
 
                     const transcript = results.items[0] || null;
-                    if (!transcript || !transcript.text) {
+                    if (!transcript || !transcript.searchResult || !Array.isArray(transcript.searchResult) || transcript.searchResult.length === 0) {
                         return {
                             isError: true,
                             content: [{ type: "text", text: "No transcript available. No tokens charged." }]

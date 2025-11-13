@@ -1,0 +1,249 @@
+import { McpAgent } from "agents/mcp";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
+import { ApiClient } from "./api-client";
+import type { Env } from "./types";
+import { ResponseFormat } from "./types";
+import type { Props } from "./props";
+import { checkBalance, consumeTokensWithRetry } from "./tokenConsumption";
+import { formatInsufficientTokensError } from "./tokenUtils";
+import { sanitizeOutput, redactPII, validateOutput } from 'pilpat-mcp-security';
+import { ApifyClient } from 'apify-client';
+import { extractYouTubeVideoId, formatTranscriptAsText } from './utils/youtube';
+import { getCachedApifyResult, setCachedApifyResult } from './apify-cache';
+
+/**
+ * TODO: Rename this class to match your server name (e.g., WeatherMCP, NewsMCP, etc.)
+ *
+ * Skeleton MCP Server with Token Integration
+ *
+ * This server demonstrates the complete token-based authentication pattern
+ * with three example tools showing different token costs (1, 2, 3 tokens).
+ *
+ * Generic type parameters:
+ * - Env: Cloudflare Workers environment bindings (KV, D1, WorkOS credentials, etc.)
+ * - unknown: No state management (stateless server) - change if you need state
+ * - Props: Authenticated user context from WorkOS (user, tokens, permissions, userId)
+ *
+ * Authentication flow:
+ * 1. User connects via MCP client
+ * 2. Redirected to WorkOS AuthKit (Magic Auth)
+ * 3. User enters email → receives 6-digit code
+ * 4. OAuth callback checks if user exists in token database
+ * 5. If not in database → 403 error page
+ * 6. If in database → Access granted, user info available via this.props
+ * 7. All tools check token balance before execution
+ */
+export class YoutubeTranscript extends McpAgent<Env, unknown, Props> {
+    server = new McpServer({
+        name: "YouTube Transcript MCP", // YouTube video transcript extraction
+        version: "1.0.0",
+    });
+
+    // NO initialState - this is a stateless server
+    // TODO: If you need state, add:
+    // initialState = { yourStateHere: "value" };
+    // Then change generic from 'unknown' to your State type
+
+    async init() {
+        // ========================================================================
+        // API CLIENT INITIALIZATION
+        // ========================================================================
+        // TODO: Initialize your custom API client here when implementing tools
+        // Example: const apiClient = new YourApiClient(this.env.YOUR_API_KEY);
+        // DO NOT uncomment until you have implemented your custom API client class
+
+        // ========================================================================
+        // TOOL REGISTRATION SECTION
+        // ========================================================================
+        // Tools will be generated here by the automated boilerplate generator
+        // Usage: npm run generate-tool --prp PRPs/your-prp.md --tool-id your_tool --output snippets
+        //
+        // Or implement tools manually following the 7-Step Token Pattern:
+        // Step 0: Generate actionId for idempotency
+        // Step 1: Get userId from this.props
+        // Step 2: Check token balance with checkBalance()
+        // Step 3: Handle insufficient balance
+        // Step 4: Execute business logic
+        // Step 4.5: Apply security (sanitizeOutput + redactPII)
+        // Step 5: Consume tokens with consumeTokensWithRetry()
+        // Step 6: Return result
+        //
+        // Tool Design Best Practices:
+        // ✅ Consolidation: Combine multi-step operations into goal-oriented tools
+        // ✅ ResponseFormat: Add format parameter for large datasets (concise/detailed)
+        // ✅ Context Optimization: Return semantic data (names) not technical (IDs)
+        // ✅ Token Efficiency: Implement pagination, filtering, smart defaults
+        // ✅ Single-Item Inputs: Accept one item per call to enable deep AI analysis
+        //    - Use: pageUrl: z.string().url() (Analyst mode - deep insights)
+        //    - NOT: pageUrls: z.array(z.string()) (Aggregator mode - shallow lists)
+        //    - Rationale: Array inputs flood LLM context → forces shallow aggregation
+        //    - Exception: Batch export tools where aggregation IS the goal
+        //
+        // ========================================================================
+        // TOOL: get_youtube_transcript
+        // ========================================================================
+        // Extracts YouTube video transcript using Apify Actor
+        // Cost: 3 tokens (Apify PPR + processing)
+        // Implements: Cache-before-semaphore, variable pricing, security, zero-result protection
+        this.server.addTool({
+            name: "get_youtube_transcript",
+            description: "Extract the full transcript from a YouTube video with timestamps. Returns formatted transcript text with [HH:MM:SS] timestamps. ⚠️ Costs 3 tokens per request. Zero cost if video has no transcript.",
+            inputSchema: z.object({
+                videoUrl: z.string().url().describe("Single YouTube video URL (e.g., 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'). Must have available transcript.")
+            }),
+            execute: async (params) => {
+                const FLAT_COST = 3;  // Tokens per successful execution
+                const CACHE_TTL = 900;  // 15 minutes
+                const ACTOR_ID = "faVsWy9VTSNVIhWpR";  // pintostudio/youtube-transcript-scraper
+                const ACTOR_TIMEOUT = 60;  // seconds
+
+                // Step 1: Validate YouTube URL
+                const videoId = extractYouTubeVideoId(params.videoUrl);
+                if (!videoId) {
+                    return {
+                        isError: true,
+                        content: [{ type: "text", text: "Invalid YouTube URL format. Please provide a valid YouTube video URL." }]
+                    };
+                }
+
+                // Step 2: Get userId from authenticated props
+                const userId = this.props?.userId;
+                if (!userId) {
+                    return {
+                        isError: true,
+                        content: [{ type: "text", text: "Authentication required. Please authenticate first." }]
+                    };
+                }
+
+                // Step 3: Check token balance
+                const balance = await checkBalance(this.env.TOKEN_DB, userId);
+                if (balance < FLAT_COST) {
+                    return formatInsufficientTokensError(balance, FLAT_COST);
+                }
+
+                // Step 3.5: Check cache BEFORE semaphore (70% instant delivery)
+                const cacheKey = { actorId: ACTOR_ID, videoUrl: params.videoUrl };
+                const cached = await getCachedApifyResult(this.env.CACHE_KV, cacheKey);
+                if (cached) {
+                    console.log(`[Cache HIT] Returning cached transcript for video ${videoId}`);
+                    // Charge for cache hit (optional - can be 0 or lower cost)
+                    await consumeTokensWithRetry(this.env.TOKEN_DB, userId, FLAT_COST, `get_youtube_transcript:${videoId}`);
+
+                    return {
+                        content: [{
+                            type: "text",
+                            text: `✅ YouTube Transcript (Cached)\n\nVideo ID: ${videoId}\nWord Count: ${cached.wordCount}\n\n${cached.transcript}`
+                        }]
+                    };
+                }
+
+                // Step 3.7: Acquire semaphore (ONLY if cache miss)
+                const semaphoreId = this.env.APIFY_SEMAPHORE.idFromName("global");
+                const semaphore = this.env.APIFY_SEMAPHORE.get(semaphoreId);
+                const slot = await semaphore.fetch(new Request("https://internal/acquire", {
+                    method: "POST",
+                    body: JSON.stringify({ userId, actorId: ACTOR_ID })
+                })).then(r => r.json<{ acquired: boolean; slotId?: string }>());
+
+                if (!slot.acquired) {
+                    return {
+                        isError: true,
+                        content: [{ type: "text", text: "Server busy. Maximum concurrent requests reached (32). Please try again in 30-60 seconds." }]
+                    };
+                }
+
+                let finalResult = null;
+                try {
+                    // Step 4: Execute Apify Actor
+                    const apifyClient = new ApifyClient({ token: this.env.APIFY_API_TOKEN });
+                    const run = await apifyClient.actor(ACTOR_ID).call({
+                        videoUrl: params.videoUrl
+                    }, { timeout: ACTOR_TIMEOUT });
+
+                    const { items } = await apifyClient.dataset(run.defaultDatasetId).listItems();
+
+                    // Step 4.3: Extract single result
+                    const transcript = items[0] || null;
+                    if (!transcript || !transcript.text) {
+                        // Zero-result case: return error, don't charge tokens
+                        return {
+                            isError: true,
+                            content: [{ type: "text", text: `Video has no available transcript. This may occur if:\n- Transcript is disabled by uploader\n- Video is private or deleted\n- Video is too new (transcripts take time to generate)\n\nNo tokens charged for this request.` }]
+                        };
+                    }
+
+                    // Step 4.4: Format transcript
+                    const transcriptText = formatTranscriptAsText(transcript);
+                    const wordCount = transcriptText.split(/\s+/).length;
+
+                    finalResult = {
+                        videoId,
+                        videoUrl: params.videoUrl,
+                        transcript: transcriptText,
+                        wordCount
+                    };
+
+                    // Step 4.5: Apply security (sanitize + redact PII)
+                    const sanitized = sanitizeOutput(finalResult.transcript, {
+                        maxLength: 50000,  // Large transcripts allowed
+                        removeHtml: true,
+                        removeControlChars: true,
+                        normalizeWhitespace: true
+                    });
+
+                    const { redacted, detectedPII } = redactPII(sanitized, {
+                        redactEmails: false,  // v1.1.0+ default
+                        redactPhones: true,
+                        redactCreditCards: true,
+                        redactSSN: true,
+                        redactBankAccounts: true,
+                        redactPolishPESEL: true,
+                        redactPolishIDCards: true,
+                        redactPolishPassports: true,
+                        redactPolishPhones: true
+                    });
+
+                    if (detectedPII.length > 0) {
+                        console.warn(`[Security] Detected PII in transcript: ${detectedPII.join(', ')}`);
+                    }
+
+                    finalResult.transcript = redacted;
+
+                    // Step 4.7: Cache result (15-minute TTL)
+                    await setCachedApifyResult(this.env.CACHE_KV, cacheKey, finalResult, CACHE_TTL);
+
+                } finally {
+                    // Step 7: Release semaphore (ALWAYS in finally block)
+                    if (slot.slotId) {
+                        await semaphore.fetch(new Request("https://internal/release", {
+                            method: "POST",
+                            body: JSON.stringify({ slotId: slot.slotId })
+                        }));
+                    }
+                }
+
+                // Step 5: Charge actual cost (success = FLAT_COST, failure = 0)
+                const actualCost = finalResult ? FLAT_COST : 0;
+                if (actualCost > 0) {
+                    await consumeTokensWithRetry(this.env.TOKEN_DB, userId, actualCost, `get_youtube_transcript:${videoId}`);
+                }
+
+                // Step 6: Return result
+                if (!finalResult) {
+                    return {
+                        isError: true,
+                        content: [{ type: "text", text: "Failed to extract transcript. Please try again." }]
+                    };
+                }
+
+                return {
+                    content: [{
+                        type: "text",
+                        text: `✅ YouTube Transcript Extracted\n\nVideo ID: ${videoId}\nWord Count: ${finalResult.wordCount}\n\n${finalResult.transcript}`
+                    }]
+                };
+            }
+        });
+    }
+}

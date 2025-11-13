@@ -19,14 +19,12 @@ import { uploadTextToR2 } from '../utils/r2';
 import type { Env } from '../types';
 
 export type TranscriptWorkflowParams = {
-    videoUrl: string;
     videoId: string;
-    apifyApiToken: string;
+    transcriptData: any;  // Pass transcript data from tool (already fetched with cache/semaphore)
 };
 
 export type TranscriptWorkflowResult = {
     summary: string;
-    transcript: string;
     wordCount: number;
     chapterCount: number;
 };
@@ -42,36 +40,20 @@ const summarySchema = z.object({
 
 export class TranscriptProcessingWorkflow extends WorkflowEntrypoint<Env, TranscriptWorkflowParams> {
     async run(event: WorkflowEvent<TranscriptWorkflowParams>, step: WorkflowStep): Promise<TranscriptWorkflowResult> {
-        const { videoUrl, videoId, apifyApiToken } = event.payload;
+        const { videoId, transcriptData } = event.payload;
 
-        // Initialize Workers AI (access via this.env as per Cloudflare docs)
+        // Initialize Workers AI
         const workersai = createWorkersAI({ binding: this.env.AI });
         const model = workersai("@cf/meta/llama-3.1-70b-instruct" as any);
 
-        // Step 1: Fetch transcript data from Apify
-        const rawTranscript = await step.do("fetch transcript from Apify", async (): Promise<any> => {
-            const apifyClient = new ApifyClient({ token: apifyApiToken });
-
-            const run = await apifyClient.actor("faVsWy9VTSNVIhWpR").call({
-                videoUrl: videoUrl
-            });
-
-            const { items } = await apifyClient.dataset(run.defaultDatasetId).listItems();
-
-            const transcript = items[0] || null;
-
-            if (!transcript || !transcript.text) {
-                throw new Error("No transcript available for this video");
-            }
-
-            return transcript;
-        });
-
-        // Step 2: Prepare timestamped text (convert Apify format to readable text)
+        // Step 1: Prepare timestamped text (convert Apify format to readable text)
         const timestampedData = await step.do("prepare timestamped text", async (): Promise<{ timestampedText: string; rawText: string; wordCount: number }> => {
-            const timestampedText = formatTranscriptAsText(rawTranscript);
-            const rawText = Array.isArray(rawTranscript.text)
-                ? rawTranscript.text.map((item: any) => item.text).join(' ')
+            const timestampedText = formatTranscriptAsText(transcriptData);
+
+            // Extract raw text from data array
+            const rawText = Array.isArray(transcriptData.data)
+                ? transcriptData.data.filter((item: any) => item.text && item.text.trim())
+                    .map((item: any) => item.text).join(' ')
                 : '';
 
             return {
@@ -144,17 +126,22 @@ ${cleanedTranscript}`;
             return object.summary;
         });
 
-        // Step 5: Save transcript to R2 for archival
+        // Step 5: Save transcript to R2 for archival (optional)
         await step.do("save transcript to R2", async (): Promise<boolean> => {
-            const r2Key = `${videoId}_transcript.txt`;
-            await uploadTextToR2(this.env.R2_TRANSCRIPTS, r2Key, timestampedData.rawText);
-            return true;
+            try {
+                const r2Key = `${videoId}_summary_${Date.now()}.txt`;
+                await uploadTextToR2(this.env.R2_TRANSCRIPTS, r2Key, summaryMarkdown);
+                console.log(`[Workflow] Saved summary to R2: ${r2Key}`);
+                return true;
+            } catch (error) {
+                console.error(`[Workflow] Failed to save to R2:`, error);
+                return false;  // Don't fail workflow if R2 upload fails
+            }
         });
 
-        // Return final workflow result
+        // Return final workflow result (summary only - full transcript already available from original tool)
         return {
             summary: summaryMarkdown,
-            transcript: timestampedData.rawText,
             wordCount: timestampedData.wordCount,
             chapterCount: (summaryMarkdown.match(/\*\*/g) || []).length / 2  // Count markdown headers
         };

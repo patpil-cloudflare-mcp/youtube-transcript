@@ -598,7 +598,8 @@ async function executeGetYoutubeTranscriptTool(
 
     if (cached) {
       await consumeTokensWithRetry(env.TOKEN_DB, userId, FLAT_COST, "youtube-transcript", TOOL_NAME, args, cached, true, actionId);
-      return { content: [{ type: "text", text: `✅ Transcript (Cached)\n\n${cached.transcript.substring(0, 2000)}...` }] };
+      const preview = cached.transcript ? cached.transcript.substring(0, 2000) : '';
+      return { content: [{ type: "text", text: `✅ Transcript (Cached)\n\nVideo: ${cached.videoId}\nWords: ${cached.wordCount}\n\n${preview}...` }] };
     }
 
     // STEP 3.7: Acquire semaphore
@@ -624,6 +625,14 @@ async function executeGetYoutubeTranscriptTool(
     const sanitized = sanitizeOutput(transcriptText, { maxLength: 50000, removeHtml: true, removeControlChars: true, normalizeWhitespace: true });
     const { redacted } = redactPII(sanitized, { redactEmails: false, redactPhones: true, redactCreditCards: true });
 
+    // Safety check: Ensure we have valid transcript
+    if (!redacted || redacted.trim().length === 0) {
+      return {
+        isError: true,
+        content: [{ type: "text", text: "Transcript extraction failed - no valid text found. No tokens charged." }]
+      };
+    }
+
     const finalResult = {
       videoId,
       videoUrl: args.videoUrl,
@@ -638,10 +647,11 @@ async function executeGetYoutubeTranscriptTool(
     await consumeTokensWithRetry(env.TOKEN_DB, userId, FLAT_COST, "youtube-transcript", TOOL_NAME, args, finalResult, false, actionId);
 
     // STEP 6: Return
+    const preview = finalResult.transcript.substring(0, 2000);
     return {
       content: [{
         type: "text",
-        text: `✅ YouTube Transcript\n\nVideo: ${videoId}\nWords: ${finalResult.wordCount}\n\n${finalResult.transcript.substring(0, 2000)}...`
+        text: `✅ YouTube Transcript\n\nVideo: ${videoId}\nWords: ${finalResult.wordCount}\n\n${preview}...`
       }]
     };
 

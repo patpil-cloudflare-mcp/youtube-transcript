@@ -7,6 +7,7 @@ import type { Env } from "./types";
 // Export Durable Objects for Cloudflare Workers
 export { YoutubeTranscript };        // MCP Agent for protocol handling
 export { ApifySemaphore } from "./apify-semaphore";  // CRITICAL: Concurrency control
+export { TranscriptProcessingWorkflow } from "./workflows/transcript-processing-workflow";  // Multi-step AI processing
 
 /**
  * Skeleton MCP Server with Dual Authentication Support

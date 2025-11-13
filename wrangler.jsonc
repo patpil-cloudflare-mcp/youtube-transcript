@@ -23,7 +23,7 @@
  */
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "apify-skeleton-mcp",  // Apify MCP Skeleton Template
+  "name": "youtube-transcript",  // YouTube Transcript MCP Server
   "main": "src/index.ts",
   "compatibility_date": "2025-03-10",
   "compatibility_flags": ["nodejs_compat"],
@@ -106,13 +106,32 @@
   ],
 
   /**
-   * OPTIONAL: Workers AI binding for AI models
-   *
-   * Uncomment if you need to use Workers AI:
+   * REQUIRED: Workers AI binding for transcript processing
    */
-  // "ai": {
-  //   "binding": "AI"
-  // },
+  "ai": {
+    "binding": "AI"
+  },
+
+  /**
+   * REQUIRED: R2 bucket for transcript storage
+   */
+  "r2_buckets": [
+    {
+      "binding": "R2_TRANSCRIPTS",
+      "bucket_name": "youtube-transcripts"
+    }
+  ],
+
+  /**
+   * REQUIRED: Cloudflare Workflows for multi-step AI processing
+   */
+  "workflows": [
+    {
+      "name": "transcript-processing",
+      "binding": "TRANSCRIPT_WORKFLOW",
+      "class_name": "TranscriptProcessingWorkflow"
+    }
+  ],
 
   /**
    * OPTIONAL: Additional KV namespaces

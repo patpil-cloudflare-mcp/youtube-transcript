@@ -63,6 +63,19 @@ export interface Env {
 
     /** KV namespace for caching Apify results (15-minute TTL for hot queries) */
     CACHE_KV: KVNamespace;
+
+    /**
+     * YOUTUBE TRANSCRIPT-SPECIFIC BINDINGS
+     */
+
+    /** R2 bucket for storing transcript files (presigned URLs for downloads) */
+    R2_TRANSCRIPTS: R2Bucket;
+
+    /** Workers AI binding for transcript processing (cleaning, summarization) */
+    AI: Ai;
+
+    /** Cloudflare Workflow for multi-step AI processing orchestration */
+    TRANSCRIPT_WORKFLOW: Workflow;
 }
 
 /**

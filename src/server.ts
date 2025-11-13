@@ -196,18 +196,39 @@ export class YoutubeTranscript extends McpAgent<Env, unknown, Props> {
                         await setCachedApifyResult(this.env.CACHE_KV, ACTOR_ID, cacheKey, transcriptData, CACHE_TTL);
                     }
 
-                    // STEP 5: Perform AI processing inline (simplified for MCP synchronous response)
-                    // TODO: For production, consider using Workflows for longer processing
-                    const transcriptText = formatTranscriptAsText(transcriptData);
-                    const wordCount = transcriptText.split(/\s+/).length;
+                    // STEP 5: Invoke Cloudflare Workflow for AI processing
+                    const workflowId = `transcript-${videoId}-${Date.now()}`;
+                    const instance = await this.env.TRANSCRIPT_WORKFLOW.create({
+                        id: workflowId,
+                        params: {
+                            videoId,
+                            transcriptData
+                        }
+                    });
 
-                    // Simplified AI summary (basic formatting)
-                    // In production, this would use Workers AI for actual summarization
-                    const workflowResult = {
-                        summary: `## YouTube Video Summary\n\n**Note:** AI summarization coming soon. For now, here's the formatted transcript:\n\n${transcriptText.substring(0, 1500)}...\n\n[Full transcript available via get_youtube_transcript tool]`,
-                        wordCount,
-                        chapterCount: 1
-                    };
+                    // Wait for workflow to complete (polls every 2 seconds, max 60 seconds)
+                    let workflowResult: any = null;
+                    let attempts = 0;
+                    const maxAttempts = 30; // 60 seconds total
+
+                    while (attempts < maxAttempts) {
+                        const status = await instance.status();
+
+                        if (status.status === 'complete') {
+                            workflowResult = status.output;
+                            break;
+                        } else if (status.status === 'errored') {
+                            throw new Error(`Workflow failed: ${status.error || 'Unknown error'}`);
+                        }
+
+                        // Wait 2 seconds before next check
+                        await new Promise(resolve => setTimeout(resolve, 2000));
+                        attempts++;
+                    }
+
+                    if (!workflowResult) {
+                        throw new Error('Workflow timed out after 60 seconds');
+                    }
 
                     // STEP 6: Consume tokens
                     const finalResult = {

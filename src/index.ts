@@ -65,6 +65,7 @@ const oauthProvider = new OAuthProvider({
  * This handler detects the authentication method and routes requests accordingly:
  * - API key (wtyk_*) → Direct API key authentication
  * - OAuth token or no auth → OAuth flow via OAuthProvider
+ * - /r2/transcripts/* → Public R2 file serving
  */
 export default {
     async fetch(
@@ -75,6 +76,12 @@ export default {
         try {
             const url = new URL(request.url);
             const authHeader = request.headers.get("Authorization");
+
+            // Handle R2 transcript file requests (public access)
+            if (url.pathname.startsWith('/r2/transcripts/')) {
+                console.log(`📁 [R2] Serving transcript file: ${url.pathname}`);
+                return await handleR2Request(request, env, url.pathname);
+            }
 
             // Check for API key authentication on MCP endpoints
             if (isApiKeyRequest(url.pathname, authHeader)) {
@@ -128,4 +135,65 @@ function isApiKeyRequest(pathname: string, authHeader: string | null): boolean {
 
     const token = authHeader.replace("Bearer ", "");
     return token.startsWith("wtyk_");
+}
+
+/**
+ * Handle R2 transcript file requests
+ *
+ * Serves transcript files from the R2_TRANSCRIPTS bucket with public access.
+ * URL format: /r2/transcripts/{videoId}.txt
+ *
+ * Files are automatically cleaned up after 24 hours via R2 lifecycle rule.
+ *
+ * @param request - Incoming HTTP request
+ * @param env - Cloudflare Workers environment
+ * @param pathname - Request pathname (e.g., /r2/transcripts/dQw4w9WgXcQ.txt)
+ * @returns Response with transcript file or 404 error
+ */
+async function handleR2Request(
+    request: Request,
+    env: Env,
+    pathname: string
+): Promise<Response> {
+    try {
+        // Extract key from pathname: /r2/transcripts/{videoId}.txt → transcripts/{videoId}.txt
+        const key = pathname.replace(/^\/r2\//, '');
+
+        console.log(`📁 [R2] Fetching file: ${key}`);
+
+        // Fetch file from R2 bucket
+        const object = await env.R2_TRANSCRIPTS.get(key);
+
+        if (!object) {
+            console.log(`❌ [R2] File not found: ${key}`);
+            return new Response('Transcript not found or expired (24h TTL)', {
+                status: 404,
+                headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+            });
+        }
+
+        console.log(`✅ [R2] Serving file: ${key} (${object.size} bytes)`);
+
+        // Return file with appropriate headers
+        return new Response(object.body, {
+            status: 200,
+            headers: {
+                'Content-Type': 'text/plain; charset=utf-8',
+                'Content-Length': object.size.toString(),
+                'Cache-Control': 'public, max-age=3600',  // Cache for 1 hour
+                'X-Video-ID': object.customMetadata?.videoId || 'unknown',
+                'X-Uploaded-At': object.customMetadata?.uploadedAt || 'unknown'
+            }
+        });
+
+    } catch (error) {
+        console.error(`❌ [R2] Error serving file:`, error);
+        return new Response(
+            `Error serving transcript: ${error instanceof Error ? error.message : String(error)}`,
+            {
+                status: 500,
+                headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+            }
+        );
+    }
 }

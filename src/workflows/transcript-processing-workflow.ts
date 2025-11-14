@@ -13,16 +13,6 @@ import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloud
 import { formatTranscriptAsText } from '../utils/youtube';
 import { uploadTextToR2 } from '../utils/r2';
 import type { Env } from '../types';
-import { z } from 'zod';
-
-// Structured output schema for chapters
-const chapterSchema = z.object({
-    chapters: z.array(z.object({
-        timestamp: z.string().describe("Timestamp in [HH:MM:SS] or [MM:SS] format"),
-        title: z.string().describe("Concise chapter title (3-8 words)"),
-        summary: z.string().describe("2-3 sentence summary of the chapter content")
-    }))
-});
 
 export type TranscriptWorkflowParams = {
     videoId: string;
@@ -56,74 +46,59 @@ export class TranscriptProcessingWorkflow extends WorkflowEntrypoint<Env, Transc
             };
         });
 
-        // Step 3: Single AI Call - Clean AND Summarize in one pass with STRUCTURED OUTPUT (optimized for quality + speed)
-        const chaptersStructured = await step.do("generate clean summary with AI", async () => {
-            const systemPrompt = `You are an expert video analyst and transcript editor. Extract thematic chapters from YouTube video transcripts.
+        // Step 3: Single AI Call - Clean AND Summarize in one pass (optimized for speed)
+        const summaryMarkdown = await step.do("generate clean summary with AI", async (): Promise<string> => {
+            const prompt = `You are an expert video analyst and transcript editor. Your task is to transform a raw YouTube video transcript into a clean, structured chapter summary.
 
-TASK:
-1. Identify major thematic sections (typically 3-8 chapters)
-2. For each chapter: extract timestamp, create title (3-8 words), write 2-3 sentence summary
-3. Remove filler words (um, uh, you know, like) from summaries
-4. Use clear, professional language
-5. Preserve all factual information and key concepts
+**Your Task (2-in-1):**
+1. Clean the transcript by removing filler words, stutters, and repetitions
+2. Identify thematic sections and create timestamped chapter summaries
 
-IMPORTANT:
-- Use the EXACT timestamp where each section begins
-- Titles should be concise and descriptive
-- Summaries should capture the main points discussed in that section
-- Focus on content, not presentation style`;
+**Input Format:**
+The transcript contains timestamps in [HH:MM:SS] or [MM:SS] format followed by spoken text.
 
-            const userPrompt = `Extract chapters from this transcript:
+**Output Format:**
+Return ONLY a Markdown list of chapters with timestamps and summaries.
 
+<rules>
+- Read the entire transcript to understand the full context
+- Identify major thematic sections (typically 3-8 chapters for most videos)
+- For each chapter:
+  1. Use the timestamp where that section begins as the header
+  2. Write a concise 2-3 sentence summary of what was discussed
+- Remove filler words (um, uh, you know, like, sort of) from your summaries
+- Fix grammatical errors and use clear, professional language
+- Preserve all factual information, technical details, and key concepts
+- Return ONLY the markdown list - no introduction, no concluding remarks
+- Each chapter should be a bullet point with bold timestamp + title, followed by indented description
+</rules>
+
+<example_input_transcript>
+[00:12] Um, so today we're gonna, you know, talk about machine learning, like, algorithms and stuff. There are, uh, three main types. [01:15] The first type is, um, supervised learning, right? It works on, like, labeled data which the algorithm, you know, learns from. This allows it to predict outcomes for new data. [04:30] The second type is unsupervised learning. In this case, we don't have labels. The goal is to find hidden patterns or structures in the data, for example, through clustering.
+</example_input_transcript>
+
+<example_ai_response>
+* **[00:12] Introduction to Machine Learning Algorithms**
+    The speaker introduces the topic of machine learning algorithms and announces a discussion of three main types. This sets the foundation for understanding different approaches to machine learning.
+
+* **[01:15] Overview of Supervised Learning**
+    This section explains supervised learning, which uses labeled data to train models capable of predicting outcomes for new data. The algorithm learns patterns from the training examples.
+
+* **[04:30] Definition of Unsupervised Learning**
+    Unsupervised learning is presented as an approach that operates on unlabeled data. Its purpose is to discover internal structures and patterns, such as through clustering techniques.
+</example_ai_response>
+
+**Transcript to process:**
 ${timestampedData.timestampedText}`;
 
-            console.log('[Workflow] Calling Mistral Small 3.1 24B via AI Gateway (structured output)...');
+            console.log('[Workflow] Calling Mistral Small 3.1 24B via AI Gateway (single-pass clean + summarize)...');
             const startTime = Date.now();
 
-            // Use Workers AI binding with structured output
+            // Use Workers AI binding with gateway option (auto-authenticated, no token needed)
             const response = await this.env.AI.run(
                 '@cf/mistralai/mistral-small-3.1-24b-instruct' as any,
                 {
-                    messages: [
-                        { role: 'system', content: systemPrompt },
-                        { role: 'user', content: userPrompt }
-                    ],
-                    response_format: {
-                        type: 'json_schema',
-                        json_schema: {
-                            name: 'chapter_extraction',
-                            strict: true,
-                            schema: {
-                                type: 'object',
-                                properties: {
-                                    chapters: {
-                                        type: 'array',
-                                        items: {
-                                            type: 'object',
-                                            properties: {
-                                                timestamp: {
-                                                    type: 'string',
-                                                    description: 'Timestamp in [HH:MM:SS] or [MM:SS] format'
-                                                },
-                                                title: {
-                                                    type: 'string',
-                                                    description: 'Concise chapter title (3-8 words)'
-                                                },
-                                                summary: {
-                                                    type: 'string',
-                                                    description: '2-3 sentence summary of chapter content'
-                                                }
-                                            },
-                                            required: ['timestamp', 'title', 'summary'],
-                                            additionalProperties: false
-                                        }
-                                    }
-                                },
-                                required: ['chapters'],
-                                additionalProperties: false
-                            }
-                        }
-                    },
+                    prompt: prompt,
                     max_tokens: 8192
                 },
                 {
@@ -135,33 +110,9 @@ ${timestampedData.timestampedText}`;
             ) as any;
 
             const elapsed = Date.now() - startTime;
-            console.log(`[Workflow] Mistral response received in ${elapsed}ms (structured output)`);
+            console.log(`[Workflow] Mistral response received in ${elapsed}ms`);
 
-            // Parse structured response
-            const parsed = typeof response.response === 'string'
-                ? JSON.parse(response.response)
-                : response.response;
-
-            // Validate with Zod schema
-            const validated = chapterSchema.parse(parsed);
-
-            console.log(`[Workflow] Extracted ${validated.chapters.length} chapters`);
-            return validated;
-        });
-
-        // Step 3.5: Format structured chapters into markdown
-        const summaryMarkdown = await step.do("format chapters as markdown", async (): Promise<string> => {
-            const formatted = chaptersStructured.chapters.map(chapter => {
-                // Ensure timestamp has brackets
-                const timestamp = chapter.timestamp.startsWith('[')
-                    ? chapter.timestamp
-                    : `[${chapter.timestamp}]`;
-
-                return `* **${timestamp} ${chapter.title}**\n    ${chapter.summary}`;
-            }).join('\n\n');
-
-            console.log(`[Workflow] Formatted ${chaptersStructured.chapters.length} chapters as markdown`);
-            return formatted;
+            return response.response || '';
         });
 
         // Step 5: Save transcript to R2 for archival (optional)

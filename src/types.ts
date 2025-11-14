@@ -43,13 +43,14 @@ export interface Env {
      * Cloudflare AI Gateway Configuration
      *
      * Route all AI requests through AI Gateway for:
-     * - Authenticated access control
      * - Rate limiting (60 requests/hour per user)
      * - Response caching (1-hour TTL)
      * - Analytics and monitoring
+     *
+     * Note: Authentication is automatic when using Workers AI binding with gateway option.
+     * No API token needed in code.
      */
     AI_GATEWAY_ID: string;
-    AI_GATEWAY_TOKEN: string;
 
     /**
      * APIFY-SPECIFIC BINDINGS (REQUIRED)

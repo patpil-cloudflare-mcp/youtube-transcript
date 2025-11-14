@@ -13,7 +13,6 @@ import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloud
 import { formatTranscriptAsText } from '../utils/youtube';
 import { uploadTextToR2 } from '../utils/r2';
 import type { Env } from '../types';
-import { makeAIGatewayRequest } from '../ai-gateway';
 
 export type TranscriptWorkflowParams = {
     videoId: string;
@@ -95,22 +94,25 @@ ${timestampedData.timestampedText}`;
             console.log('[Workflow] Calling Mistral Small 3.1 24B via AI Gateway (single-pass clean + summarize)...');
             const startTime = Date.now();
 
-            const response = await makeAIGatewayRequest(
-                { gatewayId: this.env.AI_GATEWAY_ID, token: this.env.AI_GATEWAY_TOKEN },
-                'workers-ai',
-                '@cf/mistralai/mistral-small-3.1-24b-instruct',
-                { prompt: prompt, max_tokens: 8192 },
-                3600  // 1 hour cache
-            );
+            // Use Workers AI binding with gateway option (auto-authenticated, no token needed)
+            const response = await this.env.AI.run(
+                '@cf/mistralai/mistral-small-3.1-24b-instruct' as any,
+                {
+                    prompt: prompt,
+                    max_tokens: 8192
+                },
+                {
+                    gateway: {
+                        id: this.env.AI_GATEWAY_ID,  // "mcp-production-gateway"
+                        cacheTtl: 3600  // 1 hour cache
+                    }
+                }
+            ) as any;
 
             const elapsed = Date.now() - startTime;
-            console.log(`[Workflow] Mistral response received in ${elapsed}ms (cache: ${response.cacheStatus})`);
+            console.log(`[Workflow] Mistral response received in ${elapsed}ms`);
 
-            if (!response.success) {
-                throw new Error(`AI Gateway error: ${response.error?.message || 'Unknown error'}`);
-            }
-
-            return (response.data as any)?.response || '';
+            return response.response || '';
         });
 
         // Step 5: Save transcript to R2 for archival (optional)

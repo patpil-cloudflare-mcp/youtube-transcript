@@ -13,6 +13,7 @@ import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloud
 import { formatTranscriptAsText } from '../utils/youtube';
 import { uploadTextToR2 } from '../utils/r2';
 import type { Env } from '../types';
+import { makeAIGatewayRequest } from '../ai-gateway';
 
 export type TranscriptWorkflowParams = {
     videoId: string;
@@ -68,12 +69,21 @@ Your ONLY goal is to reformat and clean the transcript provided by the user, rem
 Transcript to clean:
 ${timestampedData.timestampedText}`;
 
-            const response = await this.env.AI.run("@cf/meta/llama-3.1-70b-instruct" as any, {
-                prompt: prompt,
-                max_tokens: 8192
-            }) as any;
+            console.log('[Workflow] Calling Llama 3.1 70B via AI Gateway...');
+            const response = await makeAIGatewayRequest(
+                { gatewayId: this.env.AI_GATEWAY_ID, token: this.env.AI_GATEWAY_TOKEN },
+                'workers-ai',
+                '@cf/meta/llama-3.1-70b-instruct',
+                { prompt: prompt, max_tokens: 8192 },
+                3600  // 1 hour cache
+            );
 
-            return response.response || '';
+            if (!response.success) {
+                throw new Error(`AI Gateway error: ${response.error?.message || 'Unknown error'}`);
+            }
+
+            console.log(`[Workflow] Llama 3.1 70B response received (cache: ${response.cacheStatus})`);
+            return (response.data as any)?.response || '';
         });
 
         // Step 4: AI Call 2 - Summarize sections with timestamps
@@ -110,12 +120,21 @@ The transcript contains timestamps in the format [HH:MM:SS] or [MM:SS] that indi
 Transcript to summarize:
 ${cleanedTranscript}`;
 
-            const response = await this.env.AI.run("@cf/mistralai/mistral-small-3.1-24b-instruct" as any, {
-                prompt: prompt,
-                max_tokens: 8192
-            }) as any;
+            console.log('[Workflow] Calling Mistral Small 3.1 24B via AI Gateway...');
+            const response = await makeAIGatewayRequest(
+                { gatewayId: this.env.AI_GATEWAY_ID, token: this.env.AI_GATEWAY_TOKEN },
+                'workers-ai',
+                '@cf/mistralai/mistral-small-3.1-24b-instruct',
+                { prompt: prompt, max_tokens: 8192 },
+                3600  // 1 hour cache
+            );
 
-            return response.response || '';
+            if (!response.success) {
+                throw new Error(`AI Gateway error: ${response.error?.message || 'Unknown error'}`);
+            }
+
+            console.log(`[Workflow] Mistral Small 3.1 24B response received (cache: ${response.cacheStatus})`);
+            return (response.data as any)?.response || '';
         });
 
         // Step 5: Save transcript to R2 for archival (optional)

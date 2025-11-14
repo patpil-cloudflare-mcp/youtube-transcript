@@ -7,8 +7,9 @@ import { checkBalance, consumeTokensWithRetry } from "./tokenConsumption";
 import { formatInsufficientTokensError } from "./tokenUtils";
 import { sanitizeOutput, redactPII } from 'pilpat-mcp-security';
 import { ApifyClient } from './apify-client';
-import { extractYouTubeVideoId, formatTranscriptAsText } from './utils/youtube';
+import { extractYouTubeVideoId, formatRawTranscript } from './utils/youtube';
 import { getCachedApifyResult, setCachedApifyResult, hashApifyInput } from './apify-cache';
+import { uploadTranscriptToR2, getR2PublicUrl } from './utils/r2-helpers';
 import type { SemaphoreSlot } from './types';
 
 export class YoutubeTranscript extends McpAgent<Env, unknown, Props> {
@@ -23,7 +24,7 @@ export class YoutubeTranscript extends McpAgent<Env, unknown, Props> {
         // ========================================================================
         this.server.tool(
             "get_youtube_transcript",
-            "Extract full transcript from a YouTube video with timestamps. Returns formatted text with [HH:MM:SS] timestamps. ⚠️ Costs 3 tokens per request. Zero cost if no transcript.",
+            "Extract full transcript from a YouTube video and save to R2 file. Returns download URL to raw transcript text (no timestamps). ⚠️ Costs 3 tokens per request. Zero cost if no transcript. File expires after 24 hours.",
             {
                 videoUrl: z.string().url("Invalid YouTube URL").describe("YouTube video URL (e.g., 'https://www.youtube.com/watch?v=dQw4w9WgXcQ')")
             },
@@ -63,13 +64,9 @@ export class YoutubeTranscript extends McpAgent<Env, unknown, Props> {
                     const cached = await getCachedApifyResult(this.env.CACHE_KV, ACTOR_ID, cacheKey);
 
                     if (cached) {
-                        // Reconstruct missing fields from available data (handles old cached data)
-                        const videoId = cached.videoId || extractYouTubeVideoId(cached.videoUrl || params.videoUrl);
-                        const wordCount = cached.wordCount || (cached.transcript ? cached.transcript.split(/\s+/).length : 0);
-
                         await consumeTokensWithRetry(this.env.TOKEN_DB, userId, FLAT_COST, "youtube-transcript", TOOL_NAME, params, cached, true, actionId);
-                        const preview = cached.transcript ? cached.transcript.substring(0, 2000) : '';
-                        return { content: [{ type: "text", text: `✅ Transcript (Cached)\n\nVideo: ${videoId}\nWords: ${wordCount}\n\n${preview}...` }] };
+                        const r2Url = cached.r2Url || getR2PublicUrl("youtube-transcripts", videoId);
+                        return { content: [{ type: "text", text: `✅ YouTube Transcript (Cached)\n\nVideo: ${videoId}\nWords: ${cached.wordCount}\n\nDownload: ${r2Url}` }] };
                     }
 
                     // STEP 3.7: Acquire semaphore
@@ -91,8 +88,8 @@ export class YoutubeTranscript extends McpAgent<Env, unknown, Props> {
                     }
 
                     // STEP 4.4-4.5: Format & Security
-                    const transcriptText = formatTranscriptAsText(transcript);
-                    const sanitized = sanitizeOutput(transcriptText, { maxLength: 50000, removeHtml: true, removeControlChars: true, normalizeWhitespace: true });
+                    const rawTranscript = formatRawTranscript(transcript);
+                    const sanitized = sanitizeOutput(rawTranscript, { maxLength: 500000, removeHtml: true, removeControlChars: true, normalizeWhitespace: true });
                     const { redacted } = redactPII(sanitized, { redactEmails: false, redactPhones: true, redactCreditCards: true });
 
                     // Safety check: Ensure we have valid transcript
@@ -103,10 +100,14 @@ export class YoutubeTranscript extends McpAgent<Env, unknown, Props> {
                         };
                     }
 
+                    // STEP 4.6: Upload to R2
+                    await uploadTranscriptToR2(this.env.R2_TRANSCRIPTS, videoId, redacted);
+                    const r2Url = getR2PublicUrl("youtube-transcripts", videoId);
+
                     const finalResult = {
                         videoId,
                         videoUrl: params.videoUrl,
-                        transcript: redacted,
+                        r2Url,
                         wordCount: redacted.split(/\s+/).length
                     };
 
@@ -117,11 +118,10 @@ export class YoutubeTranscript extends McpAgent<Env, unknown, Props> {
                     await consumeTokensWithRetry(this.env.TOKEN_DB, userId, FLAT_COST, "youtube-transcript", TOOL_NAME, params, finalResult, false, actionId);
 
                     // STEP 6: Return
-                    const preview = finalResult.transcript.substring(0, 2000);
                     return {
                         content: [{
                             type: "text",
-                            text: `✅ YouTube Transcript\n\nVideo: ${videoId}\nWords: ${finalResult.wordCount}\n\n${preview}...`
+                            text: `✅ YouTube Transcript\n\nVideo: ${videoId}\nWords: ${finalResult.wordCount}\n\nDownload: ${r2Url}`
                         }]
                     };
 

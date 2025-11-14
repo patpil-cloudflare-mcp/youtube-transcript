@@ -55,6 +55,27 @@ export function formatTranscriptAsText(transcript: any): string {
 }
 
 /**
+ * Formats Apify transcript result as RAW plain text (NO timestamps)
+ *
+ * Use this for R2 file uploads where users want clean, readable transcripts
+ * without timestamp annotations.
+ *
+ * @param transcript - Apify Actor output with data array
+ * @returns Raw transcript text without timestamps
+ */
+export function formatRawTranscript(transcript: any): string {
+    if (!transcript.data || !Array.isArray(transcript.data)) {
+        return '';
+    }
+
+    return transcript.data
+        .filter((item: any) => item.text && item.text.trim()) // Filter out items without text
+        .map((item: any) => item.text.trim()) // Extract only text
+        .join(' ') // Join with spaces for natural flow
+        .trim();
+}
+
+/**
  * Formats seconds as HH:MM:SS or MM:SS
  * @param seconds - Time offset in seconds
  * @returns Formatted timestamp

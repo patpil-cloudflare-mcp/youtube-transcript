@@ -70,7 +70,7 @@ ${timestampedData.timestampedText}`;
 
             const response = await this.env.AI.run("@cf/meta/llama-3.1-70b-instruct" as any, {
                 prompt: prompt,
-                max_tokens: 2048
+                max_tokens: 8192
             }) as any;
 
             return response.response || '';
@@ -110,9 +110,9 @@ The transcript contains timestamps in the format [HH:MM:SS] or [MM:SS] that indi
 Transcript to summarize:
 ${cleanedTranscript}`;
 
-            const response = await this.env.AI.run("@cf/meta/llama-3.1-70b-instruct" as any, {
+            const response = await this.env.AI.run("@cf/mistralai/mistral-small-3.1-24b-instruct" as any, {
                 prompt: prompt,
-                max_tokens: 2048
+                max_tokens: 8192
             }) as any;
 
             return response.response || '';

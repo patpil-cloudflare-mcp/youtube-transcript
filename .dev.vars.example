@@ -1,9 +1,43 @@
-# WorkOS Authentication Credentials
-# Get these from: https://dashboard.workos.com/
-WORKOS_CLIENT_ID=your_workos_client_id_here
-WORKOS_API_KEY=your_workos_api_key_here
+# Development Environment Variables - YouTube Transcript MCP
+#
+# IMPORTANT: Copy this file to .dev.vars and fill in real values
+#   cp .dev.vars.example .dev.vars
+#
+# NEVER commit .dev.vars (it's in .gitignore)
+#
+# These variables are automatically loaded by Cloudflare Workers in development.
+# For production, use: wrangler secret put SECRET_NAME
 
-# TODO: Add your custom environment variables below
-# Examples:
-# EXTERNAL_API_KEY=your_api_key_here
-# EXTERNAL_API_URL=https://api.example.com
+# ============================================================================
+# WORKOS AUTHENTICATION (REQUIRED)
+# ============================================================================
+# Get these from: https://dashboard.workos.com/
+# 1. Go to WorkOS Dashboard
+# 2. Select your project
+# 3. Navigate to API Keys section
+
+# WorkOS Client ID (public identifier, starts with client_)
+WORKOS_CLIENT_ID=client_XXXXXXXXXXXXXXXXXXXXXXXXXX
+
+# WorkOS API Key (secret, starts with sk_)
+WORKOS_API_KEY=sk_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
+# ============================================================================
+# APIFY INTEGRATION (REQUIRED)
+# ============================================================================
+# Get from: https://console.apify.com/account/integrations
+# 1. Log in to Apify Console
+# 2. Go to Settings → Integrations
+# 3. Copy your API token (starts with apify_api_)
+
+# Apify API Token (40 characters, required for transcript extraction)
+APIFY_API_TOKEN=apify_api_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
+# ============================================================================
+# NOTES
+# ============================================================================
+# - All secrets above are required for local development
+# - For production deployment, use: wrangler secret put SECRET_NAME
+# - Example: echo "real_token" | wrangler secret put APIFY_API_TOKEN
+# - Never hardcode these values in source code
+# - Resource IDs (D1, KV, R2) are configured in wrangler.jsonc, not here

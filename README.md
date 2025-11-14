@@ -14,7 +14,45 @@ Production-ready template for building Cloudflare MCP servers with integrated to
 
 ## Quick Setup
 
-### 1. Create New Server
+### 1. Local Development Setup
+
+**IMPORTANT: All secrets must be configured in `.dev.vars` for local development. NEVER commit secrets to source code.**
+
+```bash
+# 1. Copy the environment template
+cp .dev.vars.example .dev.vars
+
+# 2. Edit .dev.vars with real credentials
+vim .dev.vars  # or use your preferred editor
+
+# 3. Fill in required secrets:
+#    - WORKOS_CLIENT_ID (from https://dashboard.workos.com/)
+#    - WORKOS_API_KEY (from https://dashboard.workos.com/)
+#    - APIFY_API_TOKEN (from https://console.apify.com/account/integrations)
+
+# 4. Verify .dev.vars is gitignored (it should be by default)
+git status  # Should NOT show .dev.vars as untracked
+
+# 5. For production, use wrangler secrets (NEVER commit to code):
+echo "client_XXXXXXXXXX" | wrangler secret put WORKOS_CLIENT_ID
+echo "sk_XXXXXXXXXX" | wrangler secret put WORKOS_API_KEY
+echo "apify_api_XXXXXXXXXX" | wrangler secret put APIFY_API_TOKEN
+```
+
+**Secret Management Best Practices:**
+- ✅ **DO**: Store all secrets in `.dev.vars` (local) and wrangler secrets (production)
+- ✅ **DO**: Use `.dev.vars.example` as a template (safe to commit)
+- ✅ **DO**: Reference `CLOUDFLARE_CONFIG.md` for resource IDs (D1, KV, R2)
+- ❌ **DON'T**: Hardcode secrets in source code
+- ❌ **DON'T**: Commit `.dev.vars` to git (it's in `.gitignore`)
+- ❌ **DON'T**: Share `.dev.vars` via Slack, email, or other insecure channels
+
+**Why This Approach:**
+- **Proactive**: Prevents secrets from entering code in the first place
+- **Simple**: One source of truth for all secrets (`.dev.vars` + wrangler secrets)
+- **Safe**: Pre-commit hooks detect accidental secret commits as a safety net
+
+### 2. Install Dependencies
 
 **Automated Setup (Recommended):**
 
